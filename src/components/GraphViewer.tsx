@@ -3,6 +3,7 @@ import cytoscape from 'cytoscape';
 import type { Core } from 'cytoscape';
 import { DFA } from '../core/DFA';
 import type { StepSequence } from '../hooks/useSimulator';
+import { useTheme } from './ThemeContext';
 
 interface GraphViewerProps {
   dfa: DFA;
@@ -15,6 +16,8 @@ interface GraphViewerProps {
 export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, stepSequence, currentStepIdx, subStep }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
   // Initialize and update graph data
   useEffect(() => {
@@ -39,17 +42,17 @@ export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, stepSequence, cur
         { selector: 'node', style: {
           'label': 'data(label)',
           'text-valign': 'center', 'text-halign': 'center',
-          'background-color': '#61bffc', 'width': 56, 'height': 56,
-          'color': '#0b1021', 'font-size': '14px',
-          'border-width': 'data(border)', 'border-color': '#f59e0b'
+          'background-color': isDark ? '#1e3a8a' : '#61bffc', 'width': 56, 'height': 56,
+          'color': isDark ? '#f8fafc' : '#0b1021', 'font-size': '14px',
+          'border-width': 'data(border)', 'border-color': isDark ? '#fbbf24' : '#f59e0b'
         }},
         { selector: 'edge', style: {
           'label': 'data(label)', 'width': 3,
-          'line-color': '#94a3b8', 'target-arrow-color': '#94a3b8',
+          'line-color': isDark ? '#475569' : '#94a3b8', 'target-arrow-color': isDark ? '#475569' : '#94a3b8',
           'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
           'control-point-step-size': 60, 'text-rotation': 'autorotate',
-          'font-size': '18px', 'color': '#e5e7eb',
-          'text-background-opacity': 0.95, 'text-background-color': '#0b1021',
+          'font-size': '18px', 'color': isDark ? '#e2e8f0' : '#e5e7eb',
+          'text-background-opacity': 0.95, 'text-background-color': isDark ? '#0f172a' : '#0b1021',
           'text-background-shape': 'roundrectangle', 'text-background-padding': '3px'
         }},
         { selector: '.active', style: { 'background-color': '#FFD700', 'border-color': '#d97706' } },
@@ -60,7 +63,7 @@ export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, stepSequence, cur
     });
 
     return () => { if (cyRef.current) cyRef.current.destroy(); };
-  }, [dfa]);
+  }, [dfa, isDark]);
 
   // Handle Highlights without full re-render
   useEffect(() => {
@@ -93,5 +96,5 @@ export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, stepSequence, cur
     }
   }, [currentStepIdx, subStep, stepSequence, dfa]);
 
-  return <div ref={containerRef} className="w-full h-[500px] bg-slate-50 border border-slate-200 rounded-2xl shadow-inner" />;
+  return <div ref={containerRef} className="w-full h-[500px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-inner transition-colors duration-300" />;
 };

@@ -37,41 +37,41 @@ export const Controls: React.FC<ControlsProps> = ({ onApply, onSimulateAll, onSt
     };
 
     return (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <h2 className="text-xl font-bold mb-4 text-slate-800">Definición del AFD</h2>
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 transition-colors duration-300">
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100 transition-colors">Definición del AFD</h2>
             
             <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Alfabeto (coma)</label>
-                    <input type="text" value={simbolos} onChange={e => setSimbolos(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 focus:ring focus:ring-blue-200 outline-none" placeholder="0,1" />
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Alfabeto (coma)</label>
+                    <input type="text" value={simbolos} onChange={e => setSimbolos(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring focus:ring-blue-200 dark:focus:ring-blue-800 outline-none transition-colors" placeholder="0,1" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Estados (coma)</label>
-                    <input type="text" value={estados} onChange={e => setEstados(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 focus:ring focus:ring-blue-200 outline-none" placeholder="Q0,Q1" />
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Estados (coma)</label>
+                    <input type="text" value={estados} onChange={e => setEstados(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring focus:ring-blue-200 dark:focus:ring-blue-800 outline-none transition-colors" placeholder="Q0,Q1" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Estado Inicial</label>
-                    <input type="text" value={inicial} onChange={e => setInicial(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 focus:ring focus:ring-blue-200 outline-none" placeholder="Q0" />
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Estado Inicial</label>
+                    <input type="text" value={inicial} onChange={e => setInicial(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring focus:ring-blue-200 dark:focus:ring-blue-800 outline-none transition-colors" placeholder="Q0" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Estados Finales</label>
-                    <input type="text" value={finales} onChange={e => setFinales(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 focus:ring focus:ring-blue-200 outline-none" placeholder="Q1" />
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Estados Finales</label>
+                    <input type="text" value={finales} onChange={e => setFinales(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring focus:ring-blue-200 dark:focus:ring-blue-800 outline-none transition-colors" placeholder="Q1" />
                 </div>
             </div>
 
             <div className="mb-4">
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Transiciones (origen,simbolo,destino por línea)</label>
-                <textarea value={transiciones} onChange={e => setTransiciones(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 focus:ring focus:ring-blue-200 outline-none h-28 font-mono text-sm" />
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Transiciones (origen,simbolo,destino por línea)</label>
+                <textarea value={transiciones} onChange={e => setTransiciones(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring focus:ring-blue-200 dark:focus:ring-blue-800 outline-none h-28 font-mono text-sm transition-colors" />
             </div>
 
             <button onClick={handleApply} className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 transition shadow-sm mb-6">
                 Aplicar Definición
             </button>
 
-            <h2 className="text-xl font-bold mb-4 text-slate-800 border-t pt-6">Simulación</h2>
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-6 transition-colors">Simulación</h2>
             <div className="mb-4">
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Cadenas a procesar</label>
-                <textarea value={cadenas} onChange={e => setCadenas(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 focus:ring focus:ring-blue-200 outline-none h-20 font-mono text-sm" />
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Cadenas a procesar</label>
+                <textarea value={cadenas} onChange={e => setCadenas(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 dark:text-white focus:ring focus:ring-blue-200 dark:focus:ring-blue-800 outline-none h-20 font-mono text-sm transition-colors" />
             </div>
 
             <div className="flex flex-wrap gap-2">
