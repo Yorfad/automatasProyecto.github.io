@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
 import type { Core } from 'cytoscape';
 import { DFA } from '../core/DFA';
-import { StepSequence } from '../hooks/useSimulator';
+import type { StepSequence } from '../hooks/useSimulator';
 
 interface GraphViewerProps {
   dfa: DFA;
@@ -12,7 +12,7 @@ interface GraphViewerProps {
   subStep: number;
 }
 
-export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, currentStateName, stepSequence, currentStepIdx, subStep }) => {
+export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, stepSequence, currentStepIdx, subStep }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -50,7 +50,7 @@ export const GraphViewer: React.FC<GraphViewerProps> = ({ dfa, currentStateName,
           'control-point-step-size': 60, 'text-rotation': 'autorotate',
           'font-size': '18px', 'color': '#e5e7eb',
           'text-background-opacity': 0.95, 'text-background-color': '#0b1021',
-          'text-background-shape': 'round', 'text-background-padding': 3
+          'text-background-shape': 'roundrectangle', 'text-background-padding': '3px'
         }},
         { selector: '.active', style: { 'background-color': '#FFD700', 'border-color': '#d97706' } },
         { selector: '.active-edge', style: { 'line-color': '#ff7a18', 'target-arrow-color': '#ff7a18', 'width': 4 } },
