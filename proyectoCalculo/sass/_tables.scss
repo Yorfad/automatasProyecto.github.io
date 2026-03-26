@@ -1,0 +1,33 @@
+// scss/_tables.scss
+@use 'variables' as *;
+
+table{ width:100%; border-collapse: collapse; margin-top:8px; border-radius:12px; overflow:hidden; }
+thead{ background:#0f172a; }
+th, td { border-bottom: 1px solid $border; padding: 8px 10px; text-align:left; font-size:14px; }
+
+tr.accepted{ background: $ok-bg; }
+tr.rejected{ background: $bad-bg; }
+
+.badge{ display:inline-block; padding:2px 8px; border-radius: $radius-pill; font-size:12px; }
+.badge.ok{ background: $ok-bg; color:#22c55e; border:1px solid #14532d; }
+.badge.bad{ background: $bad-bg; color:#ef4444; border:1px solid #7f1d1d; }
+
+
+.status{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #374151;
+  background: #0b1021;
+  font-size: 14px;
+}
+.status.ok{
+  border-color: #14532d;
+  background: #052e1a;
+  color: #22c55e;
+}
+.status.bad{
+  border-color: #7f1d1d;
+  background: #2a0b0b;
+  color: #ef4444;
+}

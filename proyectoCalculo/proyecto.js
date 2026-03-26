@@ -1,985 +1,511 @@
+// Simulador AFD — paso a paso en 3 fases por transición
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const byId = (id) => document.getElementById(id);
 
+function parseList(input) {
+  if (!input) return [];
+  const raw = input.includes('\n') ? input.split(/\r?\n/) : input.split(',');
+  return raw.map(s => s.trim()).filter(Boolean);
+}
+function unique(arr){ return Array.from(new Set(arr)); }
 
-/*
-const iconoMenu = document.getElementById("iconoMenu")
-
- const header = document.querySelector(".header")
- 
- const expand = () =>{
-  header.classList.toggle("expand")
- }
-
-iconoMenu.addEventListener("click", expand);
-
- */
-
-
-// Añadir eventos a los botones
-
-
-
-document.getElementById('simular-dfa').addEventListener('click', simularDFA);
-document.getElementById('pausar-simulacion').addEventListener('click', pausarSimulacion);
-document.getElementById('continuar-simulacion').addEventListener('click', continuarSimulacion);
-document.getElementById('retroceder-simulacion').addEventListener('click', retrocederSimulacion);
-
-
-class State {
-    constructor(name, isInitial = false, isFinal = false) {
-      this.name = name;  // El nombre o identificador del estado
-      this.isInitial = isInitial;  // Indica si es el estado inicial
-      this.isFinal = isFinal;  // Indica si es un estado final
-      this.transitions = {};  // Objeto que almacena las conexiones { símbolo: destino }
+class State{
+  constructor(name, isInitial=false, isFinal=false){
+    this.name = name;
+    this.isInitial = isInitial;
+    this.isFinal = isFinal;
+    this.transitions = new Map();
+  }
+  addTransition(symbol, to){ this.transitions.set(symbol, to); }
+  getNext(symbol){ return this.transitions.get(symbol); }
+}
+class DFA{
+  constructor(){
+    this.states = new Map();
+    this.initial = null;
+    this.alphabet = [];
+  }
+  reset(){ this.states.clear(); this.initial = null; this.alphabet = []; }
+  addState(name,{initial=false,final=false}={}){
+    if(!this.states.has(name)){
+      this.states.set(name, new State(name, initial, final));
     }
-  
-    // Método para añadir una transición desde este estado
-    addTransition(symbol, destinationState) {
-      this.transitions[symbol] = destinationState;
+    const st = this.states.get(name);
+    if(initial){ this.initial = st; st.isInitial = true; }
+    if(final){ st.isFinal = true; }
+    return st;
+  }
+  addTransition(from, symbol, to){
+    const a = this.states.get(from), b = this.states.get(to);
+    if(!a || !b) throw new Error(`Transición inválida: ${from},${symbol},${to}`);
+    a.addTransition(symbol, b);
+  }
+  runChain(chain){
+    let current = this.initial; const path = [current?.name ?? '?'];
+    for(const s of chain){
+      const next = current?.getNext(s);
+      if(!next) return {accepted:false, path, ended: current?.name ?? '?'};
+      current = next; path.push(current.name);
     }
-  
-    // Método para obtener el siguiente estado basado en un símbolo de entrada
-    getNextState(symbol) {
-      return this.transitions[symbol];
-    }
+    return {accepted: !!current?.isFinal, path, ended: current?.name ?? '?'};
+  }
 }
 
-  
-class DFA {
-  constructor() {
-    this.states = {};  // Diccionario para almacenar los estados por su nombre
-    this.initialState = null; 
+let cy = null;
+function initCy(){
+  if(cy){ cy.destroy(); }
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    style: [
+      { selector: 'node', style: {
+        'label': 'data(label)',
+        'text-valign':'center',
+        'text-halign':'center',
+        'background-color':'#61bffc',
+        'width': 56,
+        'height': 56,
+        'color':'#0b1021',          // color del texto de los nodos
+        'font-size':'14px',
+        'border-width': 'data(border)',
+        'border-color':'#f59e0b'
+      }},
+      { selector: 'edge', style: {
+        'label':'data(label)',
+        'width': 3,
+        'line-color':'#94a3b8',
+        'target-arrow-color':'#94a3b8',
+        'target-arrow-shape':'triangle',
+        'curve-style':'bezier',
+        'control-point-step-size': 60,   // separa aristas paralelas
+        'text-rotation':'autorotate',
+        'font-size':'18px',              // ← MÁS GRANDE
+        'color':'#e5e7eb',               // ← texto claro en el label
+        'text-background-opacity': 0.95, // ← cajita detrás del label
+        'text-background-color':'#0b1021',
+        'text-background-shape':'round',
+        'text-background-padding': 3
+      }},
+      { selector: '.active', style: { 'background-color':'#FFD700' } },
+      { selector: '.active-edge', style: {
+        'line-color':'#ff7a18',
+        'target-arrow-color':'#ff7a18'
+      }},
+      { selector: '.final', style: { 'border-width': 4 } }
+    ],
+    layout: { name:'cose', animate:true }
+  });
+}
+
+function drawDFA(dfa){
+  initCy();
+  const elements = [];
+  for(const st of dfa.states.values()){
+    elements.push({ group:'nodes', data:{ id:st.name, label:st.name, border: st.isFinal ? 4 : 0 } });
   }
-  
-  // Método para crear un nuevo estado
-  addState(name, isInitial = false, isFinal = false) {
-    const newState = new State(name, isInitial, isFinal);
-    this.states[name] = newState;
-  
-    if (isInitial) {
-        this.initialState = newState;
-      }
-      return newState;
+  for(const st of dfa.states.values()){
+    for(const [sym, to] of st.transitions){
+      elements.push({ group:'edges', data:{ id:`${st.name}-${to.name}-${sym}`, source:st.name, target:to.name, label:sym } });
     }
-  
-    // Método para conectar dos estados
-    addTransition(fromStateName, symbol, toStateName) {
-      const fromState = this.states[fromStateName];
-      const toState = this.states[toStateName];
-  
-      if (fromState && toState) {
-        fromState.addTransition(symbol, toState);
-      } else {
-        console.error("Estado no encontrado");
-      }
+  }
+  cy.add(elements);
+  cy.layout({ name:'cose', animate:true }).run();
+}
+function highlightNode(id, on=true){
+  const n = cy.getElementById(id);
+  if(n) n.toggleClass('active', on);
+}
+function highlightEdge(from,to,sym,on=true){
+  const e = cy.getElementById(`${from}-${to}-${sym}`);
+  if(e) e.toggleClass('active-edge', on);
+}
+function resetHighlights(){
+  if(!cy) return;
+  cy.nodes().removeClass('active');
+  cy.edges().removeClass('active-edge');
+}
+
+function renderTransitionsTable(dfa){
+  const head = byId('head-simbolos');
+  const body = byId('body-transiciones');
+  head.innerHTML = '<th>Estado</th>' + dfa.alphabet.map(a=>`<th>${a}</th>`).join('');
+  body.innerHTML = '';
+  for(const st of dfa.states.values()){
+    const tds = dfa.alphabet.map(a=> (st.getNext(a)?.name ?? '—'));
+    const tr = document.createElement('tr');
+    tr.id = `row-${st.name}`;
+    tr.innerHTML = `<td>${st.name}</td>` + tds.map(x=>`<td>${x}</td>`).join('');
+    body.appendChild(tr);
+  }
+}
+function highlightRow(stateName){
+  $$('#body-transiciones tr').forEach(tr => tr.style.backgroundColor = '');
+  const tr = byId(`row-${stateName}`);
+  if(tr) tr.style.backgroundColor = '#1f2a44';
+}
+
+const dfa = new DFA();
+let currentStateName = null;
+let currentChainIdx = 0;
+let stepSequence = []; // [{from,to,sym}]
+let currentStepIdx = 0; // índice de transición
+let subStep = 0;        // 0 estado, 1 arista, 2 destino
+let paused = false;
+let autoDelay = 800;    // ms por subpaso
+
+function applyDefinitionFromInputs(){
+  const alphabet = unique(parseList(byId('inp-simbolos').value.replace(/\s+/g,'')));
+  const states   = unique(parseList(byId('inp-estados').value));
+  const initial  = byId('inp-inicial').value.trim();
+  const finals   = unique(parseList(byId('inp-finales').value));
+  if(!alphabet.length) return alert('Defina al menos un símbolo.');
+  if(!states.length) return alert('Defina al menos un estado.');
+  if(!initial) return alert('Defina el estado inicial.');
+  if(!states.includes(initial)) return alert('El estado inicial no existe.');
+  for(const f of finals){ if(!states.includes(f)) return alert(`Estado final inexistente: ${f}`); }
+
+  dfa.reset(); dfa.alphabet = alphabet;
+  for(const s of states){
+    dfa.addState(s, { initial: s===initial, final: finals.includes(s) });
+  }
+  const lines = parseList(byId('inp-transiciones').value.replace(/\r/g,''));
+  for(const line of lines){
+    const parts = line.split(',').map(x=>x.trim()).filter(Boolean);
+    if(parts.length !== 3){ return alert(`Transición inválida: "${line}"`); }
+    const [from, sym, to] = parts;
+    if(!dfa.states.has(from) || !dfa.states.has(to)) return alert(`Estado inexistente en: ${line}`);
+    if(!alphabet.includes(sym)) return alert(`Símbolo fuera del alfabeto en: ${line}`);
+    dfa.addTransition(from, sym, to);
+  }
+  drawDFA(dfa);
+  renderTransitionsTable(dfa);
+  resetHighlights();
+  alert('Definición aplicada.');
+}
+
+function parseChainsInput(){
+  const raw = byId('inp-cadenas').value;
+  if(!raw.trim()) return [];
+  const lines = raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const chains = [];
+  for(const line of lines){
+    const arr = line.includes(',') ? line.split(',').map(s=>s.trim()) : line.split('');
+    const onlyAlphabet = arr.every(s => dfa.alphabet.includes(s));
+    if(!onlyAlphabet) { alert(`Cadena contiene símbolos fuera del alfabeto: ${line}`); return []; }
+    chains.push(arr);
+  }
+  return chains;
+}
+
+function renderResultsTable(results){
+  const tbody = byId('tabla-resultados').querySelector('tbody');
+  tbody.innerHTML = '';
+  results.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.className = r.accepted ? 'accepted' : 'rejected';
+    const badge = r.accepted ? '<span class="badge ok">ACEPTADA</span>' : '<span class="badge bad">RECHAZADA</span>';
+    tr.innerHTML = `<td>${i+1}</td><td>${r.chain.join(',')}</td><td>${r.path.join(' → ')}</td><td>${badge}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+
+
+
+function simulateAll(){
+  if(!dfa.initial) return alert('Aplique la definición del AFD primero.');
+  const chains = parseChainsInput(); if(!chains.length) return;
+  const results = chains.map(chain => {
+    const res = dfa.runChain(chain);
+    return { chain, path: res.path, accepted: res.accepted };
+  });
+  renderResultsTable(results);
+  currentChainIdx = 0;
+}
+
+
+function buildStepSequenceForChain(chain){
+  stepSequence = []; currentStateName = dfa.initial?.name ?? null;
+  if(!currentStateName) return false;
+  for(const sym of chain){
+    const from = currentStateName;
+    const next = dfa.states.get(from)?.getNext(sym);
+    if(!next){ alert(`Sin transición desde ${from} con símbolo "${sym}"`); return false; }
+    stepSequence.push({from, to: next.name, sym});
+    currentStateName = next.name;
+  }
+  currentStateName = dfa.initial.name;
+  currentStepIdx = 0;
+  subStep = 0;
+  return true;
+}
+
+function renderUpTo(stepIdx, phase){
+  resetHighlights();
+  let state = dfa.initial.name;
+  highlightNode(state, true);
+  highlightRow(state);
+
+  for(let i=0;i<stepIdx;i++){
+    const {from,to,sym} = stepSequence[i];
+    highlightNode(from, false);
+    highlightEdge(from,to,sym, false);
+    highlightNode(to, true);
+    highlightRow(to);
+    state = to;
+  }
+
+  if(stepIdx < stepSequence.length){
+    const {from,to,sym} = stepSequence[stepIdx];
+    if(phase >= 1){
+      highlightEdge(from,to,sym, true);
     }
-  
-    // Método para simular el DFA en base a una cadena de entrada
-    run(input) {
-      let currentState = this.initialState;
-      for (let symbol of input) {
-        currentState = currentState.getNextState(symbol);
-        console.error(symbol);
-        if (!currentState) {
-          console.error("Cadena no válida, sin transición desde este estado.");
-          return false;
+    if(phase >= 2){
+      highlightNode(from, false);
+      highlightEdge(from,to,sym, false);
+      highlightNode(to, true);
+      highlightRow(to);
+      state = to;
+    }
+  }
+  currentStateName = state;
+}
+
+function startStepByStep(){
+  if(!dfa.initial) return alert('Aplique la definición del AFD primero.');
+  const chains = parseChainsInput(); if(!chains.length) return;
+  const chain = chains[currentChainIdx] ?? chains[0];
+  const ok = buildStepSequenceForChain(chain);
+  if(!ok) return;
+  activeChain = chain;
+  paused = false;
+  renderUpTo(0, 0);
+  scheduleNextTick();
+}
+
+function scheduleNextTick(){
+  if(paused) return;
+  setTimeout(tickStep, autoDelay);
+}
+
+function tickStep(){
+  if(paused) return;
+
+  // fin total
+  if(currentStepIdx >= stepSequence.length && subStep === 0){
+    const res = dfa.runChain(activeChain || []);
+    explainOutcome(activeChain || [], res.path, res.accepted);
+    return;
+  }
+
+  subStep = (subStep + 1) % 3;
+
+  if(subStep === 1){
+    renderUpTo(currentStepIdx, 1);
+  } else if(subStep === 2){
+    renderUpTo(currentStepIdx, 2);
+  } else {
+    currentStepIdx++;
+    if(currentStepIdx >= stepSequence.length){
+      const res = dfa.runChain(activeChain || []);
+      explainOutcome(activeChain || [], res.path, res.accepted);
+      return;
+    }
+    renderUpTo(currentStepIdx, 0);
+  }
+  scheduleNextTick();
+}
+
+
+window.addEventListener('DOMContentLoaded', () => {
+  initCy();
+  byId('menu-abrir').onclick = () => byId('file-open').click();
+  byId('menu-nuevo').onclick = () => { byId('btn-limpiar').click(); };
+  byId('menu-guardar').onclick = saveToFile;
+  byId('menu-salir').onclick = () => location.reload();
+  byId('menu-ayuda').onclick = () => byId('dlg-ayuda').showModal();
+  byId('menu-acerca').onclick = () => byId('dlg-acerca').showModal();
+  $$('.dropdown-content [data-example]').forEach(btn => btn.addEventListener('click', () => loadExample(btn.dataset.example)));
+
+  byId('btn-aplicar').onclick = applyDefinitionFromInputs;
+  byId('btn-limpiar').onclick = () => {
+    ['inp-simbolos','inp-estados','inp-inicial','inp-finales','inp-transiciones','inp-cadenas']
+      .forEach(id => byId(id).value = '');
+    dfa.reset(); initCy();
+    byId('tabla-resultados').querySelector('tbody').innerHTML = '';
+    byId('head-simbolos').innerHTML = '<th>Estado</th>';
+    byId('body-transiciones').innerHTML = '';
+    resetHighlights();
+  };
+
+  byId('btn-simular').onclick = simulateAll;
+  byId('btn-paso').onclick = startStepByStep;
+  byId('btn-pausa').onclick = () => { paused = true; };
+  byId('btn-continuar').onclick = () => { if(paused){ paused = false; scheduleNextTick(); } };
+  byId('btn-retroceder').onclick = stepBack;
+  byId('file-open').addEventListener('change', handleOpenFile);
+});
+
+function stepBack(){
+  if(currentStepIdx === 0 && subStep === 0){
+    renderUpTo(0,0);
+    return;
+  }
+  if(subStep === 0){
+    currentStepIdx = Math.max(0, currentStepIdx - 1);
+    subStep = 2;
+    renderUpTo(currentStepIdx, subStep);
+  } else {
+    subStep -= 1;
+    renderUpTo(currentStepIdx, subStep);
+  }
+}
+
+function handleOpenFile(ev){
+  const file = ev.target.files?.[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { loadFromTxtFormat(String(reader.result)); };
+  reader.readAsText(file);
+}
+function loadFromTxtFormat(txt){
+  const lines = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let step = null, alphabet=[], states=[], initial='', finals=[], transitionsRaw=[], chains=[];
+  for(const line of lines){
+    if(line.toLowerCase().startsWith('simbolos')){ step='sym'; alphabet = parseList(line.split(':')[1]??''); continue; }
+    if(line.toLowerCase().startsWith('estados:')){ step='states'; states = parseList(line.split(':')[1]??''); continue; }
+    if(line.toLowerCase().startsWith('estado inicial')){ step='initial'; initial = (line.split(':')[1]??'').trim(); continue; }
+    if(line.toLowerCase().startsWith('estados de aceptación') || line.toLowerCase().startsWith('estados de aceptacion')){
+      step='finals'; finals = parseList(line.split(':')[1]??''); continue;
+    }
+    if(line.toLowerCase().startsWith('transiciones')){ step='trans'; continue; }
+    if(line.toLowerCase().startsWith('cadenas a analizar')){ step='chains'; continue; }
+    if(step==='trans'){ transitionsRaw.push(line); }
+    else if(step==='chains'){ chains.push(line); }
+  }
+  byId('inp-simbolos').value = alphabet.join(',');
+  byId('inp-estados').value = states.join(',');
+  byId('inp-inicial').value = initial;
+  byId('inp-finales').value = finals.join(',');
+  let transTripletas = [];
+  if(transitionsRaw.length && transitionsRaw[0].includes(',')){
+    const containsArrow = transitionsRaw.some(x => x.includes('->') || x.split(',').length===3);
+    if(containsArrow){
+      for(const t of transitionsRaw){
+        if(t.includes('->') && t.includes('=')){
+          const [left,right] = t.split('=');
+          const [from, sym] = left.split('->');
+          transTripletas.push([from.trim(), sym.trim(), right.trim()]);
+        }else if(t.split(',').length===3){
+          transTripletas.push(t.split(',').map(s=>s.trim()));
         }
       }
-      return currentState.isFinal;
-    }
-  }
-
-  
-// Instancia global del DFA
-const dfa = new DFA();
-
-
-
-const cy = cytoscape({
-  container: document.getElementById('cy'),  // Contenedor donde se dibujará el grafo
-  style: [  // Estilo de los nodos y aristas
-    {
-      selector: 'node',
-      style: {
-        'label': 'data(label)',  // Mostrar el nombre del nodo
-        'text-valign': 'center',
-        'text-halign': 'center',
-        'background-color': '#61bffc',
-        'width': 50,
-        'height': 50,
-        'color': '#000',
-        'font-size': '12px'
-      }
-    },
-    {
-      selector: 'edge',
-      style: {
-        'label': 'data(label)',  // Mostrar el símbolo de la transición como etiqueta
-        'width': 3,
-        'line-color': '#ccc',
-        'target-arrow-color': '#ccc',
-        'target-arrow-shape': 'triangle',
-        'curve-style': 'bezier',
-        'font-size': '12px',
-        'text-margin-y': -10,  // Ajustar la posición del texto
-        'text-background-opacity': 1,
-        'text-background-color': '#fff',
-        'text-background-shape': 'round',
-        'text-rotation': 'autorotate'
-      }
-    }
-  ],
-  layout: {
-    name: 'preset'  // Layout en modo 'preset' para controlar la posición manualmente
-  }
-});
-
-
-document.getElementById('agregar-estado').addEventListener('click', function() {
-  const nombreEstado = document.getElementById('nombre').value;
-
-  if (nombreEstado) {
-    const nombresEstados = nombreEstado.split(',').map(nombre => nombre.trim());
-
-    nombresEstados.forEach(nombre => {
-      if (nombre) {
-        // Agregar el estado en Cytoscape
-        cy.add({
-          group: 'nodes',
-          data: { id: nombre, label: nombre },
-          position: { x: Math.random() * 600 + 100, y: Math.random() * 400 + 100 }
+    }else{
+      const matrix = transitionsRaw.map(l => l.split(',').map(s=>s.trim()));
+      states.forEach((st, rowIdx) => {
+        (matrix[rowIdx]||[]).forEach((dest, colIdx) => {
+          const sym = alphabet[colIdx];
+          if(sym && dest) transTripletas.push([st, sym, dest]);
         });
-
-        // Agregar el estado en el DFA
-        dfa.addState(nombre);
-      }
-    });
-
-    cy.layout({ name: 'preset' }).run();
-  }
-});
-
-
-
-
-
-document.getElementById('agregar-transicion').addEventListener('click', function() {
-  const transicionInput = document.getElementById('transicion').value;
-
-  if (transicionInput) {
-    const transiciones = transicionInput.split(';').map(trans => trans.trim());
-
-    transiciones.forEach(transicion => {
-      const [estadoOrigen, simbolo, estadoDestino] = transicion.split(',').map(part => part.trim());
-
-      // Verificar si existen los estados de origen y destino en Cytoscape
-      if (cy.getElementById(estadoOrigen).length > 0 && cy.getElementById(estadoDestino).length > 0) {
-        // Crear el ID único de la arista
-        const edgeId = `${estadoOrigen}-${estadoDestino}-${simbolo}`;
-
-        // Agregar la transición en Cytoscape
-        cy.add({
-          group: 'edges',
-          data: { id: edgeId, source: estadoOrigen, target: estadoDestino, label: simbolo }
-        });
-
-        // Agregar la transición en el DFA
-        dfa.addTransition(estadoOrigen, simbolo, estadoDestino);
-
-        // Aplicar el layout para las conexiones
-        cy.layout({ name: 'preset' }).run();
-      } else {
-        console.error("Uno de los estados no existe");
-      }
-    });
-  }
-});
-
-
-
-
-
-
-
-
-
-
-
-let stepInterval;
-let currentState;
-let symbolIndex = 0;
-let paused = false;
-let symbols = [];
-let history = [];
-
-// Función para simular el DFA paso a paso o de manera normallet transitionSequence = [];  // Lista para almacenar la secuencia de transiciones
-
-function simularDFA() {
-  symbols = document.getElementById('simbolos').value.split(',').map(symbol => symbol.trim());
-  const modoPaso = document.getElementById('modo-paso').checked;
-
-  if (symbols.length === 0) {
-    console.error("No se ingresaron símbolos.");
-    return;
-  }
-
-  if (!dfa.initialState) {
-    console.error("No se ha definido un estado inicial.");
-    return;
-  }
-
-  // Reiniciar variables de estado
-  currentState = dfa.initialState;
-  symbolIndex = 0;
-  transitionSequence = [];  // Reiniciar la secuencia de transiciones
-
-  // Restablecer colores antes de comenzar
-  resetColors();
-  highlightNode(currentState.name);
-
-  // Resolver todas las transiciones de antemano
-  for (let symbol of symbols) {
-    const nextState = currentState.getNextState(symbol);
-    if (!nextState) {
-      console.error(`No hay transición para el símbolo '${symbol}' desde el estado '${currentState.name}'.`);
-      alert("Cadena no válida, sin transición desde este estado.");
-      return;
-    }
-
-    // Almacenar la transición en la secuencia
-    transitionSequence.push({ from: currentState.name, to: nextState.name, symbol });
-
-    // Mover al siguiente estado
-    currentState = nextState;
-  }
-
-  if(!modoPaso){
-      // Verificar si el estado final es de aceptación
-  if (currentState.isFinal) {
-    alert("Cadena aceptada. Se terminó en un estado de aceptación.");
-  } else {
-    alert("Cadena no aceptada. No se terminó en un estado de aceptación.");
-  }
-  }
-
-
-
-  // Si el modo paso a paso está activado, inicia la simulación visual
-  if (modoPaso) {
-    currentStep = 0;
-    iniciarSimulacionVisual();  // Comienza la simulación visual
-  }
-}
-
-
-let currentStep = 0;
- paused = false;
-
-// Función para iniciar la simulación visual de la secuencia
-function iniciarSimulacionVisual() {
-  if (currentStep >= transitionSequence.length) {
-    // Simulación completa, mostrar el resultado
-    mostrarResultadoFinal();
-    return;
-  }
-
-  // Si está pausada, no hacer nada
-  if (paused) return;
-
-  const { from, to, symbol } = transitionSequence[currentStep];
-
-  // Resaltar el nodo y la arista de la transición actual
-  highlightNode(from);
-  const edgeId = `${from}-${to}-${symbol}`;
-  highlightEdge(edgeId);
-
-  // Esperar 4 segundos antes de restaurar y pasar al siguiente paso
-  setTimeout(() => {
-    if (paused) return;  // Verificar si se pausó mientras se esperaba
-
-    unhighlightNode(from);
-    unhighlightEdge(edgeId);
-    highlightNode(to);
-
-    currentStep++;  // Avanzar al siguiente paso
-
-    // Continuar con la simulación si quedan pasos
-    if (currentStep < transitionSequence.length) {
-      iniciarSimulacionVisual();  // Llamada recursiva para continuar
-    } else {
-      mostrarResultadoFinal();  // Mostrar resultado al terminar
-    }
-  }, 4000);
-}
-
-
-
-
-
-function mostrarResultadoFinal() {
-  if (currentState.isFinal) {
-    alert("Cadena aceptada. Se terminó en un estado de aceptación.");
-  } else {
-    alert("Cadena no aceptada. No se terminó en un estado de aceptación.");
-  }
-}
-
-
-
-
-
-// Función para resaltar un nodo en Cytoscape
-function highlightNode(nodeId) {
-  const node = cy.getElementById(nodeId);
-  if (node) {
-    node.style('background-color', '#FFD700');  // Cambia el color a amarillo (resaltado)
-  }
-}
-
-// Función para deshacer el resaltado de un nodo
-function unhighlightNode(nodeId) {
-  const node = cy.getElementById(nodeId);
-  if (node) {
-    node.style('background-color', '#61bffc');  // Restaurar el color original
-  }
-}
-
-// Función para resaltar una arista en Cytoscape
-// Función para resaltar una arista en Cytoscape
-function highlightEdge(edgeId) {
-  const edge = cy.getElementById(edgeId);
-  if (edge) {
-    edge.style('line-color', '#FF4500');  // Cambia el color a naranja
-    edge.style('target-arrow-color', '#FF4500');  // Cambia el color de la flecha
-  }
-}
-
-// Función para deshacer el resaltado de una arista
-function unhighlightEdge(edgeId) {
-  const edge = cy.getElementById(edgeId);
-  if (edge) {
-    edge.style('line-color', '#ccc');  // Restaurar el color original
-    edge.style('target-arrow-color', '#ccc');  // Restaurar el color de la flecha
-  }
-}
-
-
-// Función para restablecer los colores de todos los nodos y aristas
-function resetColors() {
-  cy.nodes().style('background-color', '#61bffc');
-  cy.edges().style('line-color', '#ccc');
-  cy.edges().style('target-arrow-color', '#ccc');
-}
-
-
-
-// Función para pausar la simulación
-function pausarSimulacion() {
-  if (currentStep > 0 && currentStep < transitionSequence.length) {
-    paused = true;
-    console.log("Simulación pausada.");
-  } else {
-    console.error("No se puede pausar si no ha comenzado la simulación.");
-  }
-}
-
-// Función para continuar la simulación
-function continuarSimulacion() {
-  if (paused && currentStep < transitionSequence.length) {
-    paused = false;
-    console.log("Reanudando la simulación...");
-    iniciarSimulacionVisual();  // Reanudar la simulación desde el paso actual
-  } else {
-    console.error("No se puede continuar si la simulación no está pausada o ya terminó.");
-  }
-}
-
-// Función para retroceder en la simulación
-function retrocederSimulacion() {
-  if (currentStep > 0) {
-    currentStep--;  // Retroceder un paso
-    const { from, to, symbol } = transitionSequence[currentStep];
-
-    // Restaurar el estado visualmente
-    resetColors();
-    highlightNode(from);
-    const edgeId = `${from}-${to}-${symbol}`;
-    highlightEdge(edgeId);
-
-    console.log(`Retrocediendo al paso ${currentStep + 1}`);
-  } else {
-    console.error("No se puede retroceder más.");
-  }
-}
-
-
-// Añadir un evento para simular el DFA
-document.getElementById('simular-dfa').addEventListener('click', simularDFA);
-
-
-
-function setInitialState() {
-  const initialStateName = document.getElementById('estado-inicial').value.trim();
-
-  // Verificar si el estado existe en el DFA
-  if (dfa.states.hasOwnProperty(initialStateName)) {
-    dfa.initialState = dfa.states[initialStateName];  // Establecer el estado inicial
-    alert(`Estado inicial establecido en: ${initialStateName}`);
-  } else {
-    console.error("El estado especificado no existe en el DFA.");
-    alert("El estado inicial no existe. Por favor, ingrese un estado válido.");
-  }
-}
-
-document.getElementById('establecer-estado-inicial').addEventListener('click', setInitialState);
-
-
-
-function setFinalStates() {
-  const finalStatesInput = document.getElementById('estado-final').value.trim();
-  const finalStates = finalStatesInput.split(',').map(state => state.trim());  // Permite múltiples estados separados por comas
-
-  finalStates.forEach(finalStateName => {
-    // Verificar si el estado existe en el DFA
-    if (dfa.states.hasOwnProperty(finalStateName)) {
-      const state = dfa.states[finalStateName];
-      state.isFinal = true;  // Marcar el estado como final en el DFA
-
-      // Actualizar la visualización en Cytoscape
-      const node = cy.getElementById(finalStateName);
-      if (node) {
-        node.style('background-color', '#FFA07A');  // Cambiar el color del nodo para indicar que es final
-      }
-
-      console.log(`Estado '${finalStateName}' marcado como estado de aceptación.`);
-    } else {
-      console.error(`El estado '${finalStateName}' no existe en el DFA.`);
-      alert(`El estado '${finalStateName}' no existe. Por favor, ingrese un estado válido.`);
-    }
-  });
-}
-
-document.getElementById('establecer-estado-final').addEventListener('click', setFinalStates);
-
-
-
-
-function cargarArchivo() {
-  const archivoInput = document.getElementById('archivo-dfa');
-  const archivo = archivoInput.files[0];
-
-  if (archivo) {
-    const lector = new FileReader();
-
-    lector.onload = function(e) {
-      const contenido = e.target.result;
-      procesarArchivoDFA(contenido);  // Procesar el archivo y ejecutar paso a paso
-    };
-
-    lector.readAsText(archivo);
-  } else {
-    alert("Por favor, selecciona un archivo .txt para cargar el DFA.");
-  }
-}
-
-function procesarArchivoDFA(contenido) {
-  const lineas = contenido.split('\n').map(linea => linea.trim());
-
-  let simbolos = [];
-  let estados = [];
-  let estadoInicial = '';
-  let estadosAceptacion = [];
-  let transiciones = [];
-
-  cadenasAnalizar = [];  // Limpiar las cadenas a analizar
-  transitionSequence = [];  // Limpiar la secuencia de transiciones
-
-  // Leer cada línea y procesar la información correspondiente
-  lineas.forEach(linea => {
-    if (linea.startsWith('Simbolos:')) {
-      simbolos = linea.replace('Simbolos:', '').split(',').map(s => s.trim());
-    } else if (linea.startsWith('Estados:')) {
-      estados = linea.replace('Estados:', '').split(',').map(e => e.trim());
-    } else if (linea.startsWith('Estado inicial:')) {
-      estadoInicial = linea.replace('Estado inicial:', '').trim();
-    } else if (linea.startsWith('Estados de aceptación:')) {
-      estadosAceptacion = linea.replace('Estados de aceptación:', '').split(',').map(e => e.trim());
-    } else if (linea.match(/^Q[0-9]+(,Q[0-9]+)*$/)) {
-      transiciones.push(linea.split(',').map(e => e.trim()));
-    } else if (linea.match(/^[01,]+$/)) {
-      cadenasAnalizar.push(linea.split(',').map(s => s.trim()));
-    }
-  });
-
-  if (!simbolos.length || !estados.length || !estadoInicial || !transiciones.length || !cadenasAnalizar.length) {
-    alert("Error al procesar el archivo. Por favor, revisa el formato.");
-    return;
-  }
-
-  // Crear y mostrar la tabla de transiciones
-  crearTablaTransiciones(simbolos, estados, transiciones);
-
-  // Limpiar el DFA actual
-  dfa.states = {};
-  dfa.initialState = null;
-  resetColors();  // Restablecer los colores en Cytoscape
-
-  // Agregar los estados al DFA
-  estados.forEach(estado => {
-    const isFinal = estadosAceptacion.includes(estado);
-    dfa.addState(estado, estado === estadoInicial, isFinal);
-
-    // Agregar visualmente en Cytoscape
-    cy.add({
-      group: 'nodes',
-      data: { id: estado, label: estado },
-      position: { x: Math.random() * 600 + 100, y: Math.random() * 400 + 100 },
-      style: { 'background-color': isFinal ? '#FFA07A' : '#61bffc' }
-    });
-  });
-
-  // Asignar el estado inicial
-  dfa.initialState = dfa.states[estadoInicial];
-
-  // Agregar las transiciones al DFA
-  transiciones.forEach((transicion, index) => {
-    const fromState = estados[index];
-    transicion.forEach((toState, symbolIndex) => {
-      const symbol = simbolos[symbolIndex];
-      dfa.addTransition(fromState, symbol, toState);
-
-      cy.add({
-        group: 'edges',
-        data: { id: `${fromState}-${toState}-${symbol}`, source: fromState, target: toState, label: symbol }
       });
-    });
-  });
-
-  cy.layout({ name: 'preset' }).run();
-
-  // Preparar la secuencia de transiciones usando la primera cadena
-  let cadena = cadenasAnalizar[0];
-  currentState = dfa.initialState;
-
-  for (let symbol of cadena) {
-    const nextState = currentState.getNextState(symbol);
-    if (!nextState) {
-      alert(`La cadena contiene una transición no válida desde el estado ${currentState.name}.`);
-      return;
-    }
-    transitionSequence.push({ from: currentState.name, to: nextState.name, symbol });
-    currentState = nextState;
-  }
-
-  // Verificar si el modo paso a paso está activado antes de iniciar la simulación
-  if (document.getElementById('modo-paso').checked) {
-    currentStep = 0;
-    iniciarSimulacionVisual();
-  } else {
-    mostrarResultadoFinal();  // Modo normal
-  }
-}
-
-
-
-function iniciarSimulacionVisual() {
-  if (currentStep >= transitionSequence.length) {
-    mostrarResultadoFinal();
-    return;
-  }
-
-  if (paused) return;  // No hacer nada si está pausada
-
-  const { from, to, symbol } = transitionSequence[currentStep];
-
-  // Resaltar el nodo y la arista de la transición actual
-  highlightNode(from);
-  const edgeId = `${from}-${to}-${symbol}`;
-  highlightEdge(edgeId);
-
-  // Esperar 4 segundos antes de restaurar y pasar al siguiente paso
-  setTimeout(() => {
-    if (paused) return;  // Verificar si se pausó mientras se esperaba
-
-    unhighlightNode(from);
-    unhighlightEdge(edgeId);
-    highlightNode(to);
-
-    currentState = dfa.states[to];
-    currentStep++;  // Avanzar al siguiente paso
-
-    // Continuar con la simulación si quedan pasos
-    if (currentStep < transitionSequence.length) {
-      iniciarSimulacionVisual();
-    } else {
-      mostrarResultadoFinal();  // Mostrar resultado al terminar
-    }
-  }, 4000);
-}
-
-function mostrarResultadoFinal() {
-  if (currentState.isFinal) {
-    alert("Cadena aceptada. Se terminó en un estado de aceptación.");
-  } else {
-    alert("Cadena no aceptada. No se terminó en un estado de aceptación.");
-  }
-}
-
-
-function mostrarResultadoFinal() {
-  if (currentState && currentState.isFinal) {
-    alert("Cadena aceptada. Se terminó en un estado de aceptación.");
-  } else if (currentState) {
-    alert("Cadena no aceptada. No se terminó en un estado de aceptación.");
-  } else {
-    console.error("El estado actual no está definido.");
-    alert("Ocurrió un error al finalizar la simulación.");
-  }
-}
-
-
-document.getElementById('boton-simular').addEventListener('click', function() {
-  // Verificar si hay un DFA cargado
-
-  
-  if (!dfa.initialState) {
-    alert("No se ha cargado ningún DFA. Por favor, carga un archivo primero.");
-    return;
-  }
-
-  // Verificar si hay una cadena para analizar
-  if (cadenasAnalizar.length === 0) {
-    alert("No hay cadenas para analizar. Por favor, asegúrate de que el archivo contenga cadenas a analizar.");
-    return;
-  }
-
-  // Reiniciar variables de estado
-  currentState = dfa.initialState;
-  symbolIndex = 0;
-  transitionSequence = [];
-  resetColors();  // Restaurar los colores en Cytoscape
-
-  // Resolver la secuencia de transiciones usando la primera cadena
-  const cadena = cadenasAnalizar[0];  // Usar la primera cadena para simular
-  for (let symbol of cadena) {
-    const nextState = currentState.getNextState(symbol);
-    if (!nextState) {
-      alert("La cadena contiene una transición no válida.");
-      return;
-    }
-
-    transitionSequence.push({ from: currentState.name, to: nextState.name, symbol });
-    currentState = nextState;
-  }
-
-  // Verificar si está activado el modo paso a paso
-  const modoPaso = document.getElementById('modo-paso').checked;
-  if (modoPaso) {
-    // Iniciar simulación paso a paso
-    currentStep = 0;
-    iniciarSimulacionVisual();
-  } else {
-    // Simulación normal
-    mostrarResultadoFinal();
-  }
-});
-
-
-
-function crearTablaTransiciones(simbolos, estados, transiciones) {
-  const encabezado = document.getElementById('encabezado-simbolos');
-  const cuerpoTabla = document.getElementById('cuerpo-tabla');
-
-  // Limpiar la tabla antes de llenarla
-  encabezado.innerHTML = '';
-  cuerpoTabla.innerHTML = '';
-
-  // Agregar encabezado de símbolos
-  let encabezadoHTML = '<th>Estado</th>';
-  simbolos.forEach(simbolo => {
-    encabezadoHTML += `<th>${simbolo}</th>`;
-  });
-  encabezado.innerHTML = encabezadoHTML;
-
-  // Agregar filas de transiciones para cada estado
-  estados.forEach((estado, index) => {
-    let filaHTML = `<tr id="fila-${estado}"><td>${estado}</td>`;
-
-    transiciones[index].forEach((destino, simboloIndex) => {
-      filaHTML += `<td>${destino}</td>`;
-    });
-
-    filaHTML += '</tr>';
-    cuerpoTabla.innerHTML += filaHTML;
-  });
-}
-
-// Función para resaltar la fila del estado actual en la tabla
-function resaltarFila(estado) {
-  // Limpiar el resaltado de todas las filas
-  const filas = document.querySelectorAll('#cuerpo-tabla tr');
-  filas.forEach(fila => {
-    fila.style.backgroundColor = '';  // Restaurar color de fondo
-  });
-
-  // Resaltar la fila correspondiente al estado actual
-  const filaActual = document.getElementById(`fila-${estado}`);
-  if (filaActual) {
-    filaActual.style.backgroundColor = '#FFD700';  // Cambiar a color amarillo
-  }
-}
-
-
-function resaltarFila(estado, simbolo) {
-  // Limpiar el resaltado de todas las filas
-  const filas = document.querySelectorAll('#cuerpo-tabla tr');
-  filas.forEach(fila => {
-    fila.style.backgroundColor = '';  // Restaurar color de fondo de la fila
-    const celdas = fila.querySelectorAll('td');
-    celdas.forEach(celda => celda.style.backgroundColor = '');  // Restaurar color de fondo de la celda
-  });
-
-  // Resaltar la fila correspondiente al estado actual
-  const filaActual = document.getElementById(`fila-${estado}`);
-  if (filaActual) {
-    filaActual.style.backgroundColor = '#FFD700';  // Cambiar a color amarillo
-
-    // Resaltar la celda de la transición correspondiente al símbolo
-    const indiceSimbolo = simbolo ? simbolo : null;
-    if (indiceSimbolo !== null) {
-      const celdas = filaActual.querySelectorAll('td');
-      if (celdas[indiceSimbolo + 1]) {  // +1 para ajustar el índice por la primera columna de estado
-        celdas[indiceSimbolo + 1].style.backgroundColor = '#FF4500';  // Cambiar a color naranja
-      }
     }
   }
+  byId('inp-transiciones').value = transTripletas.map(t=>t.join(',')).join('\n');
+  byId('inp-cadenas').value = chains.join('\n');
+  applyDefinitionFromInputs();
 }
 
-
-function agregarEstadoManual() {
-  const nombreEstado = document.getElementById('nombre-estado').value.trim();
-  if (!nombreEstado) {
-    alert("Por favor, ingresa un nombre para el estado.");
-    return;
-  }
-
-  const esFinal = document.getElementById('estado-final-checkbox').checked;
-  const esInicial = document.getElementById('estado-inicial-checkbox').checked;
-
-  dfa.addState(nombreEstado, esInicial, esFinal);
-
-  // Actualizar visualmente en Cytoscape
-  cy.add({
-    group: 'nodes',
-    data: { id: nombreEstado, label: nombreEstado },
-    position: { x: Math.random() * 600 + 100, y: Math.random() * 400 + 100 },
-    style: { 'background-color': esFinal ? '#FFA07A' : '#61bffc' }
-  });
-
-  // Crear o actualizar la tabla de transiciones
-  actualizarTablaDFA();
-}
-
-function agregarTransicionManual() {
-  const estadoOrigen = document.getElementById('estado-origen').value.trim();
-  const simbolo = document.getElementById('simbolo-transicion').value.trim();
-  const estadoDestino = document.getElementById('estado-destino').value.trim();
-
-  if (!estadoOrigen || !simbolo || !estadoDestino) {
-    alert("Por favor, completa todos los campos para agregar la transición.");
-    return;
-  }
-
-  dfa.addTransition(estadoOrigen, simbolo, estadoDestino);
-
-  // Agregar visualmente en Cytoscape
-  cy.add({
-    group: 'edges',
-    data: { id: `${estadoOrigen}-${estadoDestino}-${simbolo}`, source: estadoOrigen, target: estadoDestino, label: simbolo }
-  });
-
-  cy.layout({ name: 'preset' }).run();
-
-  // Crear o actualizar la tabla de transiciones
-  actualizarTablaDFA();
-}
-
-function actualizarTablaDFA() {
-  const estados = Object.keys(dfa.states);
-  const simbolos = [...new Set(Object.values(dfa.states).flatMap(state => Object.keys(state.transitions)))];
-
-  // Obtener transiciones de los estados
-  const transiciones = estados.map(estado => {
-    return simbolos.map(simbolo => dfa.states[estado].getNextState(simbolo)?.name || '-');
-  });
-
-  // Crear la tabla con los datos del DFA
-  crearTablaTransiciones(simbolos, estados, transiciones);
-}
-
-
-document.getElementById('agregar-estado').addEventListener('click', function() {
-  const nombreEstado = document.getElementById('nombre').value.trim();
-
-  if (!nombreEstado) {
-    alert("Por favor, ingresa un nombre para el estado.");
-    return;
-  }
-
-  // Agregar el estado al DFA
-  dfa.addState(nombreEstado);
-
-
-  // Actualizar la tabla de transiciones
-  actualizarTablaDFA();
-});
-
-
-document.getElementById('agregar-transicion').addEventListener('click', function() {
-  const transicionInput = document.getElementById('transicion').value.trim();
-  const [estadoOrigen, simbolo, estadoDestino] = transicionInput.split(',').map(e => e.trim());
-
-  if (!estadoOrigen || !simbolo || !estadoDestino) {
-    alert("Por favor, ingresa la transición en el formato correcto (estadoOrigen,símbolo,estadoDestino).");
-    return;
-  }
-
-  // Agregar la transición al DFA
-  dfa.addTransition(estadoOrigen, simbolo, estadoDestino);
-
-
-  // Actualizar la tabla de transiciones
-  actualizarTablaDFA();
-});
-
-document.getElementById('establecer-estado-inicial').addEventListener('click', function() {
-  const estadoInicial = document.getElementById('estado-inicial').value.trim();
-
-  if (!estadoInicial) {
-    alert("Por favor, ingresa el estado inicial.");
-    return;
-  }
-
-  if (dfa.states[estadoInicial]) {
-    dfa.initialState = dfa.states[estadoInicial];
-    alert(`Estado inicial establecido en: ${estadoInicial}`);
-  } else {
-    alert("El estado inicial ingresado no existe.");
-  }
-
-  // Actualizar la tabla de transiciones
-  actualizarTablaDFA();
-});
-
-document.getElementById('establecer-estado-final').addEventListener('click', function() {
-  const estadosFinales = document.getElementById('estado-final').value.split(',').map(e => e.trim());
-
-  if (!estadosFinales.length) {
-    alert("Por favor, ingresa al menos un estado final.");
-    return;
-  }
-
-  estadosFinales.forEach(estadoFinal => {
-    if (dfa.states[estadoFinal]) {
-      dfa.states[estadoFinal].isFinal = true;
-    } else {
-      alert(`El estado final ${estadoFinal} no existe.`);
-    }
-  });
-
-  // Actualizar la tabla de transiciones
-  actualizarTablaDFA();
-});
-
-
-function actualizarTablaDFA() {
-  const estados = Object.keys(dfa.states);
-  const simbolos = [...new Set(Object.values(dfa.states).flatMap(state => Object.keys(state.transitions)))];
-
-  // Obtener transiciones de los estados
-  const transiciones = estados.map(estado => {
-    return simbolos.map(simbolo => dfa.states[estado].getNextState(simbolo)?.name || '-');
-  });
-
-  // Crear la tabla con los datos del DFA
-  crearTablaTransiciones(simbolos, estados, transiciones);
-}
-
-
-
-
-
-
-
-document.getElementById('descargar-txt').addEventListener('click', function() {
-  // Tomar los datos directamente de los inputs
-
-  // Simbolos
-  const simbolosInput = document.getElementById('simbolos').value.trim();
-  const simbolosArray = simbolosInput ? [...new Set(simbolosInput.split(',').map(s => s.trim()))] : [];
-  const simbolosUnicos = simbolosArray.join(',');
-
-  // Estados
-  const estadosInput = document.getElementById('nombre').value.trim();
-  const estadosArray = estadosInput ? estadosInput.split(',').map(e => e.trim()) : [];
-  const estados = estadosArray.join(',');
-
-  // Estado inicial
-  const estadoInicialInput = document.getElementById('estado-inicial').value.trim();
-  const estadoInicial = estadoInicialInput || 'N/A';
-
-  // Estados de aceptación
-  const estadosFinalesInput = document.getElementById('estado-final').value.trim();
-  const estadosAceptacion = estadosFinalesInput || 'N/A';
-
-  // Transiciones
-  const transicionesInput = document.getElementById('transicion').value.trim();
-  const transicionesArray = transicionesInput ? transicionesInput.split(';').map(t => t.trim()) : [];
-
-  // Crear un objeto para organizar las transiciones por estado y símbolo
-  const transicionesOrganizadas = {};
-  transicionesArray.forEach(trans => {
-    const [origen, simbolo, destino] = trans.split(',').map(e => e.trim());
-    if (!transicionesOrganizadas[origen]) {
-      transicionesOrganizadas[origen] = {};
-    }
-    transicionesOrganizadas[origen][simbolo] = destino;
-  });
-
-  // Construir la sección de transiciones en el formato correcto
-  let transicionesTexto = '';
-  estadosArray.forEach(estado => {
-    let lineaTransicion = '';  // Inicializar línea de transiciones vacía
-    simbolosArray.forEach(simbolo => {
-      const destino = transicionesOrganizadas[estado] && transicionesOrganizadas[estado][simbolo] ? transicionesOrganizadas[estado][simbolo] : '';
-      lineaTransicion += `${destino},`;
-    });
-    // Eliminar la última coma y agregar la línea de transiciones
-    lineaTransicion = lineaTransicion.slice(0, -1);  // Eliminar la coma final
-    transicionesTexto += `${lineaTransicion}\n`;
-  });
-
-  // Cadenas a analizar
-  const cadenasInput = document.getElementById('simbolos').value.trim();
-  const cadenasArray = cadenasInput ? cadenasInput.split(';').map(cadena => cadena.split(',').map(s => s.trim()).join(',')).join('\n') : 'N/A';
-
-  // Construir el contenido del archivo en el formato correcto
-  const contenidoArchivo = `Simbolos: ${simbolosUnicos}
-Estados: ${estados}
-Estado inicial: ${estadoInicial}
-Estados de aceptación: ${estadosAceptacion}
+function saveToFile(){
+  const alphabet = byId('inp-simbolos').value.trim();
+  const states = byId('inp-estados').value.trim();
+  const initial = byId('inp-inicial').value.trim();
+  const finals = byId('inp-finales').value.trim();
+  const trans = byId('inp-transiciones').value.trim().split(/\r?\n/).filter(Boolean);
+  const chains = byId('inp-cadenas').value.trim().split(/\r?\n/).filter(Boolean);
+  let content = `Simbolos: ${alphabet}
+Estados: ${states}
+Estado inicial: ${initial}
+Estados de aceptación: ${finals}
 Transiciones:
-${transicionesTexto}Cadenas a analizar:
-${cadenasArray}`;
+`;
+  for(const t of trans){ content += t + '\n'; }
+  content += `Cadenas a analizar:\n` + (chains.join('\n') || '') + '\n';
+  const blob = new Blob([content], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'DFA_configuracion.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
-  // Crear un archivo blob y descargarlo
-  const blob = new Blob([contenidoArchivo], { type: 'text/plain' });
-  const enlaceDescarga = document.createElement('a');
-  enlaceDescarga.href = URL.createObjectURL(blob);
-  enlaceDescarga.download = 'DFA_configuracion.txt';
-  enlaceDescarga.click();
-});
+function loadExample(key){
+  const examples = {
+    e1: { sym: '0,1', states: 'Q0,Q1,Q2,Q3', init: 'Q0', finals: 'Q0',
+      trans: `Q0,0,Q2
+Q0,1,Q1
+Q1,0,Q3
+Q1,1,Q0
+Q2,0,Q0
+Q2,1,Q3
+Q3,0,Q1
+Q3,1,Q1`,
+      chains: `1,0,0,1
+1,1,1
+0,0` },
+    e2: { sym: 'a,b', states: 'p,q,r', init: 'p', finals: 'q',
+      trans: `p,a,q
+p,b,r
+q,a,q
+q,b,r
+r,a,r
+r,b,r`,
+      chains: `a,a,a,b,b,a,a
+a
+b,a` },
+    e3: { sym: 'x,y', states: 'q0,q1,q2', init: 'q0', finals: 'q0,q2',
+      trans: `q0,x,q0
+q0,y,q1
+q1,x,q1
+q1,y,q2
+q2,x,q2
+q2,y,q2`,
+      chains: `x,x,y,x,y
+y,y
+x` }
+  };
+  const ex = examples[key];
+  if(!ex) return;
+  byId('inp-simbolos').value = ex.sym;
+  byId('inp-estados').value = ex.states;
+  byId('inp-inicial').value = ex.init;
+  byId('inp-finales').value = ex.finals;
+  byId('inp-transiciones').value = ex.trans;
+  byId('inp-cadenas').value = ex.chains;
+  applyDefinitionFromInputs();
+}
 
 
-document.getElementById('reset-page').addEventListener('click', function() {
-  location.reload();  // Recarga la página para vaciar todos los campos y configuraciones
-});
+function setStatus(html, kind){ // kind: 'ok' | 'bad' | undefined
+  const box = document.getElementById('status');
+  if(!box) return;
+  box.classList.remove('ok','bad');
+  if(kind) box.classList.add(kind);
+  box.innerHTML = html;
+}
+
+function explainOutcome(chainArr, pathArr, accepted){
+  const cadena = chainArr.join(',');
+  const recorrido = pathArr.join(' → ');
+  const estadoFinal = pathArr[pathArr.length - 1];
+  if(accepted){
+    setStatus(
+      ` <b>ACEPTADA</b>. La cadena <b>${cadena}</b> consumió todos los símbolos y terminó en el estado final <b>${estadoFinal}</b>. <br>Recorrido: ${recorrido}`,
+      'ok'
+    );
+  }else{
+    setStatus(
+      ` <b>RECHAZADA</b>. La cadena <b>${cadena}</b> terminó en el estado <b>${estadoFinal}</b>, que no es de aceptación. <br>Recorrido: ${recorrido}`,
+      'bad'
+    );
+  }
+}

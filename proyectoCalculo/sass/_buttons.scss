@@ -1,0 +1,11 @@
+// scss/_buttons.scss
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+
+.btn{ @include btn(#1f2937, $border-2, $text); }
+.btn.primary{ @include btn($accent, $accent); }
+.btn.success{ @include btn($success, $success); }
+.btn.warn{ @include btn($warn, $warn, #0b1021); }
+.btn.ghost{ @include btn(transparent, $border-2, $text); }

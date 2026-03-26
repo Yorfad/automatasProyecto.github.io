@@ -1,0 +1,23 @@
+// scss/_menu.scss
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.menu{ display:flex; gap:16px; align-items:center; }
+.menu .brand{ font-weight:700; letter-spacing:.3px; }
+
+.dropdown{ position:relative;
+  > button{
+    background: transparent; color: $text; border: none;
+    padding: 8px 10px; cursor:pointer; font-weight: 600;
+  }
+}
+.dropdown-content{
+  display:none; position:absolute; min-width:220px; z-index:10;
+  background: $bg; border: 1px solid $border; border-radius: 10px; box-shadow: $shadow;
+  button{
+    width:100%; text-align:left; background:transparent; color:$text;
+    border:none; padding:10px 12px; cursor:pointer;
+    &:hover{ background: #111827; }
+  }
+}
+.dropdown:hover .dropdown-content{ display:block; }

@@ -1,0 +1,9 @@
+// scss/_layout.scss
+@use 'variables' as *;
+@use 'mixins' as *;
+
+.grid{ display:grid; grid-template-columns: 1.1fr .9fr; gap:16px; margin-top:16px; }
+.card{ @include card; }
+.card h2 { margin: 0 0 10px 0; font-size: 18px; }
+.muted{ color: $text-muted; }
+.footer{ margin:24px 0; color:#6b7280; font-size:12px; text-align:center; }
