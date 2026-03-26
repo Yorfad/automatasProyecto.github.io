@@ -1,9 +1,0 @@
-// scss/_dialogs.scss
-@use 'variables' as *;
-
-dialog{
-  background: $bg; border:1px solid $border-2; border-radius:$radius; color:$text;
-  max-width:760px; width:92%;
-  &::backdrop{ background: rgba(0,0,0,.4); }
-}
-.close-x{ float:right; background:transparent; border:0; font-size:18px; color:$text-muted; cursor:pointer; }
