@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import cytoscape, { Core } from 'cytoscape';
+import { useEffect, useRef } from 'react';
+import cytoscape from 'cytoscape';
+import type { Core } from 'cytoscape';
 import { DFA } from '../core/DFA';
 import { StepSequence } from '../hooks/useSimulator';
 

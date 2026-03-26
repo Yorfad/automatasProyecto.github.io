@@ -1,4 +1,4 @@
-import React from 'react';
+// No global react
 import { DFA } from '../core/DFA';
 
 export const ResultsLog: React.FC<{ results: { chain: string[], path: string[], accepted: boolean }[] }> = ({ results }) => (

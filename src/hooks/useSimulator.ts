@@ -22,7 +22,7 @@ export const useSimulator = () => {
   
   const [results, setResults] = useState<{ chain: string[], path: string[], accepted: boolean }[]>([]);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const applyDefinition = (alphabet: string[], states: string[], initial: string, finals: string[], transitions: string[][]) => {
     const newDfa = new DFA();

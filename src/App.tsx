@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useSimulator } from './hooks/useSimulator';
 import { Controls } from './components/Controls';
 import { GraphViewer } from './components/GraphViewer';
